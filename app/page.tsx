@@ -8,7 +8,7 @@ import ErrorDisplay from '@/components/ErrorDisplay';
 import JourneyInfo from '@/components/JourneyInfo';
 import StopJourneyModal from '@/components/StopJourneyModal';
 import { useJourneyTracking } from '@/hooks/useJourneyTracking';
-import { reverseGeocode } from '@/utils/googleMaps';
+import { reverseGeocode } from '@/utils/route';
 
 export default function Home() {
   const [destinationName, setDestinationName] = useState<string>('');
