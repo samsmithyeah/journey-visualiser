@@ -1,0 +1,7 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": ["app/**/*.tsx"],
+  "project": ["**/*.{ts,tsx}"],
+  "ignore": [".next/**", "node_modules/**", "out/**"],
+  "ignoreDependencies": ["@types/google.maps", "tailwindcss"]
+}

@@ -1,0 +1,11 @@
+# Why certain dependencies appear unused to knip but are actually needed:
+
+# @types/google.maps
+# Provides TypeScript type definitions for Google Maps API that are used globally
+# throughout the app (google.maps.*). These types are declared in types/google-maps.d.ts
+# and used in components like DestinationSearch, DebugMap, and utils/googleMaps.ts
+
+# tailwindcss
+# Core library for Tailwind CSS v4. While we only directly import @tailwindcss/postcss
+# in postcss.config.mjs, tailwindcss is a peer dependency that contains the actual
+# CSS processing engine. Run `npm list tailwindcss` to see the dependency tree.

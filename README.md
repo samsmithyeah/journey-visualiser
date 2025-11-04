@@ -1,6 +1,6 @@
-# 🚗 Kids Car Journey Visualizer
+# Are we nearly there?
 
-A real-time journey tracking app that visualizes travel progress for kids! Built with Next.js, TypeScript, and Google Maps API.
+A fun, child-friendly real-time journey tracking app that visualizes travel progress! Built with Next.js, TypeScript, and Google Maps API.
 
 ## Features
 

@@ -2,11 +2,17 @@
 
 import { useState, useEffect } from 'react';
 import DebugMap from './DebugMap';
+import CurrentPositionDisplay from './debug/CurrentPositionDisplay';
+import LocationInput from './debug/LocationInput';
+import QuickSetButtons from './debug/QuickSetButtons';
+import SimulationControls from './debug/SimulationControls';
+import { Wrench, MapPin, Map } from 'lucide-react';
+import { Coordinates } from '@/types';
 
 interface DebugPanelProps {
-  currentPosition: { lat: number; lng: number } | null;
-  origin: { lat: number; lng: number } | null;
-  destination: { lat: number; lng: number } | null;
+  currentPosition: Coordinates | null;
+  origin: Coordinates | null;
+  destination: Coordinates | null;
   onSetMockLocation: (lat: number, lng: number) => void;
   onSimulateMovement: () => void;
   isSimulating: boolean;
@@ -18,7 +24,7 @@ export default function DebugPanel({
   destination,
   onSetMockLocation,
   onSimulateMovement,
-  isSimulating
+  isSimulating,
 }: DebugPanelProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [mockLat, setMockLat] = useState('');
@@ -28,8 +34,10 @@ export default function DebugPanel({
   // Update input fields when current position changes
   useEffect(() => {
     if (currentPosition) {
-      setMockLat(currentPosition.lat.toFixed(6));
-      setMockLng(currentPosition.lng.toFixed(6));
+      queueMicrotask(() => {
+        setMockLat(currentPosition.lat.toFixed(6));
+        setMockLng(currentPosition.lng.toFixed(6));
+      });
     }
   }, [currentPosition]);
 
@@ -72,21 +80,33 @@ export default function DebugPanel({
       {/* Toggle Button */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="mb-2 px-4 py-2 bg-purple-600 text-white rounded-lg shadow-lg hover:bg-purple-700 transition-colors font-medium"
+        className="mb-2 px-5 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full shadow-2xl hover:from-purple-600 hover:to-pink-600 transition-all transform hover:scale-110 font-black text-lg border-4 border-white inline-flex items-center gap-2"
       >
-        {isExpanded ? '🔧 Hide Debug' : '🔧 Debug Mode'}
+        <Wrench className="w-5 h-5" />
+        {isExpanded ? 'Hide debug' : 'Debug mode'}
       </button>
 
       {/* Debug Panel */}
       {isExpanded && (
-        <div className="bg-white rounded-lg shadow-2xl p-4 w-96 border-2 border-purple-600 max-h-[90vh] overflow-y-auto">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-bold text-lg text-purple-600">Debug Panel</h3>
+        <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl p-6 w-96 border-4 border-purple-400 max-h-[90vh] overflow-y-auto">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-black text-2xl text-purple-600 flex items-center gap-2">
+              <Wrench className="w-6 h-6" />
+              Debug panel
+            </h3>
             <button
               onClick={() => setShowMap(!showMap)}
-              className="text-xs px-2 py-1 bg-gray-200 rounded hover:bg-gray-300"
+              className="text-sm px-3 py-2 bg-gradient-to-r from-yellow-400 to-orange-400 text-white rounded-full hover:from-yellow-500 hover:to-orange-500 font-bold border-2 border-white shadow-lg inline-flex items-center gap-1"
             >
-              {showMap ? '📍 Hide Map' : '🗺️ Show Map'}
+              {showMap ? (
+                <>
+                  <MapPin className="w-4 h-4" /> Hide map
+                </>
+              ) : (
+                <>
+                  <Map className="w-4 h-4" /> Show map
+                </>
+              )}
             </button>
           </div>
 
@@ -102,87 +122,24 @@ export default function DebugPanel({
             </div>
           )}
 
-          {/* Current Position Display */}
-          <div className="mb-4 p-3 bg-gray-50 rounded text-xs">
-            <div className="font-semibold mb-1">Current Position:</div>
-            {currentPosition ? (
-              <div className="font-mono">
-                <div>Lat: {currentPosition.lat.toFixed(6)}</div>
-                <div>Lng: {currentPosition.lng.toFixed(6)}</div>
-              </div>
-            ) : (
-              <div className="text-gray-500">No position set</div>
-            )}
-          </div>
+          <CurrentPositionDisplay currentPosition={currentPosition} />
 
-          {/* Manual Location Input */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium mb-2">Set Mock Location:</label>
-            <input
-              type="number"
-              step="0.000001"
-              placeholder="Latitude"
-              value={mockLat}
-              onChange={(e) => setMockLat(e.target.value)}
-              className="w-full px-2 py-1 border rounded mb-2 text-sm"
-            />
-            <input
-              type="number"
-              step="0.000001"
-              placeholder="Longitude"
-              value={mockLng}
-              onChange={(e) => setMockLng(e.target.value)}
-              className="w-full px-2 py-1 border rounded mb-2 text-sm"
-            />
-            <button
-              onClick={handleSetLocation}
-              className="w-full px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm font-medium"
-            >
-              Set Location
-            </button>
-          </div>
+          <LocationInput
+            mockLat={mockLat}
+            mockLng={mockLng}
+            onLatChange={setMockLat}
+            onLngChange={setMockLng}
+            onSetLocation={handleSetLocation}
+          />
 
-          {/* Quick Set Buttons */}
-          {origin && destination && (
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">Quick Set:</label>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleQuickSet('origin')}
-                  className="flex-1 px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600 text-xs"
-                >
-                  Origin
-                </button>
-                <button
-                  onClick={() => handleQuickSet('halfway')}
-                  className="flex-1 px-2 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600 text-xs"
-                >
-                  50%
-                </button>
-                <button
-                  onClick={() => handleQuickSet('destination')}
-                  className="flex-1 px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-xs"
-                >
-                  Dest
-                </button>
-              </div>
-            </div>
-          )}
+          <QuickSetButtons origin={origin} destination={destination} onQuickSet={handleQuickSet} />
 
-          {/* Simulate Movement */}
-          <div className="mb-2">
-            <button
-              onClick={onSimulateMovement}
-              disabled={!origin || !destination || isSimulating}
-              className="w-full px-3 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium"
-            >
-              {isSimulating ? '⏸️ Stop Simulation' : '▶️ Simulate Journey'}
-            </button>
-          </div>
-
-          <div className="text-xs text-gray-500 mt-2">
-            💡 Tip: Use Chrome DevTools Sensors panel for easier testing
-          </div>
+          <SimulationControls
+            origin={origin}
+            destination={destination}
+            isSimulating={isSimulating}
+            onSimulate={onSimulateMovement}
+          />
         </div>
       )}
     </div>

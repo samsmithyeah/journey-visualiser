@@ -1,14 +1,22 @@
 {
-  "name": "journey-visualiser",
+  "name": "are-we-nearly-there",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "type-check": "tsc --noEmit",
+    "format": "prettier --check \"**/*.{js,jsx,ts,tsx,json,css,md}\"",
+    "format:fix": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,md}\"",
+    "knip": "knip",
+    "check": "npm run lint && npm run type-check && npm run format && npm run knip",
+    "fix": "npm run lint:fix && npm run format:fix"
   },
   "dependencies": {
+    "lucide-react": "^0.552.0",
     "next": "16.0.1",
     "react": "19.2.0",
     "react-dom": "19.2.0"
@@ -21,7 +29,9 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.0.1",
-    "tailwindcss": "^4",
+    "knip": "^5.67.1",
+    "postcss": "^8.5.6",
+    "prettier": "^3.6.2",
     "typescript": "^5"
   }
 }

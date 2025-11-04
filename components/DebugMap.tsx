@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { Coordinates } from '@/types';
+import { MAP_CONFIG } from '@/constants';
 
 interface DebugMapProps {
-  origin: { lat: number; lng: number } | null;
-  destination: { lat: number; lng: number } | null;
-  currentPosition: { lat: number; lng: number } | null;
+  origin: Coordinates | null;
+  destination: Coordinates | null;
+  currentPosition: Coordinates | null;
   onMapClick: (lat: number, lng: number) => void;
 }
 
@@ -13,7 +15,7 @@ export default function DebugMap({
   origin,
   destination,
   currentPosition,
-  onMapClick
+  onMapClick,
 }: DebugMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const googleMapRef = useRef<google.maps.Map | null>(null);
@@ -28,8 +30,8 @@ export default function DebugMap({
     if (!window.google || !mapRef.current || googleMapRef.current) return;
 
     const map = new google.maps.Map(mapRef.current, {
-      zoom: 10,
-      center: origin || currentPosition || { lat: 51.5074, lng: -0.1278 }, // Default to London
+      zoom: MAP_CONFIG.DEFAULT_ZOOM,
+      center: origin || currentPosition || MAP_CONFIG.DEFAULT_CENTER,
       mapTypeControl: false,
       streetViewControl: false,
       fullscreenControl: false,
@@ -43,7 +45,7 @@ export default function DebugMap({
     });
 
     googleMapRef.current = map;
-    setIsLoaded(true);
+    queueMicrotask(() => setIsLoaded(true));
   }, [origin, currentPosition, onMapClick]);
 
   // Update origin marker
@@ -153,10 +155,7 @@ export default function DebugMap({
 
   return (
     <div className="relative">
-      <div
-        ref={mapRef}
-        className="w-full h-64 rounded-lg border-2 border-gray-300"
-      />
+      <div ref={mapRef} className="w-full h-64 rounded-lg border-2 border-gray-300" />
       <div className="absolute top-2 left-2 bg-white px-2 py-1 rounded shadow text-xs">
         <div className="flex items-center gap-2 mb-1">
           <span className="inline-block w-3 h-3 rounded-full bg-green-500"></span>

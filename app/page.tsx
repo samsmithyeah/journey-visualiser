@@ -4,11 +4,16 @@ import { useState } from 'react';
 import DestinationSearch from '@/components/DestinationSearch';
 import JourneyVisualizer from '@/components/JourneyVisualizer';
 import DebugPanel from '@/components/DebugPanel';
+import ErrorDisplay from '@/components/ErrorDisplay';
+import JourneyInfo from '@/components/JourneyInfo';
+import StopJourneyModal from '@/components/StopJourneyModal';
 import { useJourneyTracking } from '@/hooks/useJourneyTracking';
+import { reverseGeocode } from '@/utils/googleMaps';
 
 export default function Home() {
   const [destinationName, setDestinationName] = useState<string>('');
   const [originName, setOriginName] = useState<string>('Current Location');
+  const [showStopModal, setShowStopModal] = useState<boolean>(false);
   const {
     progress,
     isTracking,
@@ -21,7 +26,7 @@ export default function Home() {
     currentPosition,
     setMockPosition,
     simulateJourney,
-    isSimulating
+    isSimulating,
   } = useJourneyTracking();
 
   const handleDestinationSelect = async (place: google.maps.places.PlaceResult) => {
@@ -34,40 +39,43 @@ export default function Home() {
       const originCoords = await startJourney(coords);
 
       // Reverse geocode the origin to get its address
-      if (originCoords && window.google) {
-        const geocoder = new google.maps.Geocoder();
-        geocoder.geocode(
-          { location: { lat: originCoords.lat, lng: originCoords.lng } },
-          (results, status) => {
-            if (status === 'OK' && results && results[0]) {
-              // Try to get a short, readable name
-              const address = results[0].formatted_address;
-              // Extract just the city/area if possible (remove country, full details)
-              const shortAddress = address.split(',').slice(0, 2).join(',');
-              setOriginName(shortAddress || address);
-            }
-          }
-        );
+      if (originCoords) {
+        const address = await reverseGeocode(originCoords);
+        if (address) {
+          setOriginName(address);
+        }
       }
     }
   };
 
   const handleStopJourney = () => {
+    setShowStopModal(false);
     stopJourney();
     setDestinationName('');
     setOriginName('Current Location');
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
-      <main className="container mx-auto px-4 py-8">
+    <div className="min-h-screen relative overflow-hidden">
+      {/* Background SVG */}
+      <div
+        className="fixed inset-0 z-0"
+        style={{
+          backgroundImage: 'url(/journey-background.svg)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+        }}
+      />
+
+      <main className="container mx-auto px-4 py-8 relative z-10">
         {/* Header */}
         <div className="text-center mb-12">
-          <h1 className="text-5xl font-bold text-gray-800 mb-4">
-            🚗 Journey Tracker
+          <h1 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-600 via-pink-500 to-orange-400 mb-4 drop-shadow-lg">
+            Are we nearly there?
           </h1>
-          <p className="text-lg text-gray-600">
-            Track your journey in real-time!
+          <p className="text-2xl font-bold text-white drop-shadow-md">
+            Kid-friendly journey progress tracking
           </p>
         </div>
 
@@ -79,12 +87,7 @@ export default function Home() {
         )}
 
         {/* Error Display */}
-        {error && (
-          <div className="max-w-md mx-auto mb-8 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-            <p className="font-medium">Error: {error}</p>
-            <p className="text-sm mt-1">Please ensure location permissions are enabled.</p>
-          </div>
-        )}
+        <ErrorDisplay error={error} />
 
         {/* Journey Visualizer */}
         {isTracking && (
@@ -95,51 +98,15 @@ export default function Home() {
               destinationName={destinationName}
             />
 
-            {/* Additional Info */}
-            <div className="text-center mt-6">
-              {remainingDistance !== null && (
-                <p className="text-lg text-gray-600 mb-4">
-                  {remainingDistance.toFixed(1)} km remaining
-                </p>
-              )}
-
-              <button
-                onClick={handleStopJourney}
-                className="px-6 py-3 bg-red-500 text-white font-medium rounded-lg hover:bg-red-600 transition-colors"
-              >
-                Stop Journey
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Instructions */}
-        {!isTracking && (
-          <div className="max-w-2xl mx-auto mt-12 p-6 bg-white rounded-lg shadow-md">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">How to use:</h2>
-            <ol className="list-decimal list-inside space-y-2 text-gray-600">
-              <li>Enter your destination address in the search box above</li>
-              <li>Allow location permissions when prompted</li>
-              <li>Watch the progress indicator update as you travel!</li>
-              <li>The blob on the line shows your current journey progress</li>
-            </ol>
-
-            <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-              <p className="text-sm text-gray-700">
-                <strong>Note:</strong> Make sure you have added your Google Maps API key to the <code className="bg-gray-200 px-1 rounded">.env.local</code> file.
-              </p>
-            </div>
-
-            <div className="mt-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
-              <p className="text-sm text-gray-700">
-                <strong>🔧 Testing Tip:</strong> Click the &quot;Debug Mode&quot; button in the bottom right to test the journey visualizer without actually traveling!
-              </p>
-            </div>
+            <JourneyInfo
+              remainingDistance={remainingDistance}
+              onStopJourney={() => setShowStopModal(true)}
+            />
           </div>
         )}
 
         {/* Debug Panel */}
-        {isTracking && (
+        {isTracking && process.env.NODE_ENV === 'development' && (
           <DebugPanel
             currentPosition={currentPosition}
             origin={origin}
@@ -149,6 +116,13 @@ export default function Home() {
             isSimulating={isSimulating}
           />
         )}
+
+        {/* Stop Journey Confirmation Modal */}
+        <StopJourneyModal
+          isOpen={showStopModal}
+          onClose={() => setShowStopModal(false)}
+          onConfirm={handleStopJourney}
+        />
       </main>
     </div>
   );
