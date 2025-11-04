@@ -18,6 +18,7 @@ export function useJourneyTracking() {
     error: null,
     routeData: null,
     isOffRoute: false,
+    hasReachedDestination: false,
   });
 
   const [mockLocation, setMockLocation] = useState<Coordinates | null>(null);
@@ -99,33 +100,37 @@ export function useJourneyTracking() {
   );
 
   // Re-fetch route when user goes off-route
-  const refetchRoute = useCallback(async (currentPos: Coordinates, destination: Coordinates) => {
-    const now = Date.now();
-    const timeSinceLastRefetch = now - lastRouteRefetchRef.current;
+  const refetchRoute = useCallback(
+    async (origin: Coordinates, destination: Coordinates, force = false) => {
+      const now = Date.now();
+      const timeSinceLastRefetch = now - lastRouteRefetchRef.current;
 
-    // Throttle re-fetches to max once per 30 seconds
-    if (timeSinceLastRefetch < 30000) {
-      console.log('⏱️ [refetchRoute] Throttled - waiting before re-fetching');
-      return null;
-    }
+      // Throttle re-fetches to max once per 30 seconds (unless forced)
+      if (!force && timeSinceLastRefetch < 30000) {
+        console.log('⏱️ [refetchRoute] Throttled - waiting before re-fetching');
+        return null;
+      }
 
-    console.log('🔄 [refetchRoute] User off route, fetching new route...');
-    lastRouteRefetchRef.current = now;
+      console.log('🔄 [refetchRoute] User off route, fetching new route from original origin...');
+      lastRouteRefetchRef.current = now;
 
-    const newRoute = await fetchRoute(currentPos, destination);
+      // Fetch route from ORIGINAL origin to destination (not current position)
+      const newRoute = await fetchRoute(origin, destination);
 
-    if (newRoute) {
-      console.log('✅ [refetchRoute] New route fetched');
-      setJourneyState((prev) => ({
-        ...prev,
-        routeData: newRoute,
-        totalDistance: newRoute.totalDistance / 1000,
-        isOffRoute: false,
-      }));
-    }
+      if (newRoute) {
+        console.log('✅ [refetchRoute] New route fetched (keeping original origin)');
+        setJourneyState((prev) => ({
+          ...prev,
+          routeData: newRoute,
+          totalDistance: newRoute.totalDistance / 1000,
+          isOffRoute: false,
+        }));
+      }
 
-    return newRoute;
-  }, []);
+      return newRoute;
+    },
+    []
+  );
 
   // Update current position and calculate progress
   useEffect(() => {
@@ -137,17 +142,25 @@ export function useJourneyTracking() {
     if (mockLocation) {
       const progressData = calculateRouteProgress(mockLocation, journeyState.routeData);
 
-      setJourneyState((prev) => ({
-        ...prev,
-        currentPosition: mockLocation,
-        progress: progressData.progress,
-        remainingDistance: progressData.distanceRemaining,
-        isOffRoute: progressData.isOffRoute,
-      }));
+      setJourneyState((prev) => {
+        // Check if destination is reached (progress >= 99.5% or remaining distance < 50 meters)
+        const destinationReached =
+          !prev.hasReachedDestination &&
+          (progressData.progress >= 99.5 || progressData.distanceRemaining < 0.05);
+
+        return {
+          ...prev,
+          currentPosition: mockLocation,
+          progress: progressData.progress,
+          remainingDistance: progressData.distanceRemaining,
+          isOffRoute: progressData.isOffRoute,
+          hasReachedDestination: destinationReached || prev.hasReachedDestination,
+        };
+      });
 
       // If off route, refetch
-      if (progressData.isOffRoute && journeyState.destination) {
-        refetchRoute(mockLocation, journeyState.destination);
+      if (progressData.isOffRoute && journeyState.destination && journeyState.origin) {
+        refetchRoute(journeyState.origin, journeyState.destination);
       }
 
       return;
@@ -174,19 +187,27 @@ export function useJourneyTracking() {
           distanceFromRoute: progressData.distanceFromRoute.toFixed(1) + ' m',
         });
 
-        setJourneyState((prev) => ({
-          ...prev,
-          currentPosition: currentPos,
-          progress: progressData.progress,
-          remainingDistance: progressData.distanceRemaining,
-          isOffRoute: progressData.isOffRoute,
-          error: null, // Clear any previous errors
-        }));
+        setJourneyState((prev) => {
+          // Check if destination is reached (progress >= 99.5% or remaining distance < 50 meters)
+          const destinationReached =
+            !prev.hasReachedDestination &&
+            (progressData.progress >= 99.5 || progressData.distanceRemaining < 0.05);
+
+          return {
+            ...prev,
+            currentPosition: currentPos,
+            progress: progressData.progress,
+            remainingDistance: progressData.distanceRemaining,
+            isOffRoute: progressData.isOffRoute,
+            error: null, // Clear any previous errors
+            hasReachedDestination: destinationReached || prev.hasReachedDestination,
+          };
+        });
 
         // If user is off route, refetch a new route
-        if (progressData.isOffRoute && journeyState.destination) {
+        if (progressData.isOffRoute && journeyState.destination && journeyState.origin) {
           console.log('⚠️ [watchPosition] User is off route!');
-          refetchRoute(currentPos, journeyState.destination);
+          refetchRoute(journeyState.origin, journeyState.destination);
         }
       },
       (error) => {
@@ -221,6 +242,7 @@ export function useJourneyTracking() {
   }, [
     journeyState.isTracking,
     journeyState.destination,
+    journeyState.origin,
     journeyState.routeData,
     mockLocation,
     refetchRoute,
@@ -238,6 +260,7 @@ export function useJourneyTracking() {
       error: null,
       routeData: null,
       isOffRoute: false,
+      hasReachedDestination: false,
     });
     setMockLocation(null);
     setIsSimulating(false);
@@ -249,9 +272,22 @@ export function useJourneyTracking() {
   }, [simulationInterval]);
 
   // Set mock location for testing
-  const setMockPosition = useCallback((lat: number, lng: number) => {
-    setMockLocation({ lat, lng });
-  }, []);
+  const setMockPosition = useCallback(
+    async (lat: number, lng: number) => {
+      const newPosition = { lat, lng };
+      setMockLocation(newPosition);
+
+      // Force immediate route re-fetch when manually setting position
+      if (journeyState.destination && journeyState.origin && journeyState.routeData) {
+        const progressData = calculateRouteProgress(newPosition, journeyState.routeData);
+        if (progressData.isOffRoute) {
+          console.log('🎯 [setMockPosition] Position is off-route, forcing route re-fetch...');
+          await refetchRoute(journeyState.origin, journeyState.destination, true);
+        }
+      }
+    },
+    [journeyState.destination, journeyState.origin, journeyState.routeData, refetchRoute]
+  );
 
   // Simulate journey by gradually moving from origin to destination
   const simulateJourney = useCallback(() => {

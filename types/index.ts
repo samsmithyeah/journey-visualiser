@@ -24,6 +24,7 @@ export interface JourneyState {
   error: string | null;
   routeData: RouteData | null;
   isOffRoute: boolean;
+  hasReachedDestination: boolean;
 }
 
 // Google Maps autocomplete prediction
