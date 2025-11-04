@@ -4,6 +4,14 @@ export interface Coordinates {
   lng: number;
 }
 
+// Route data from API
+export interface RouteData {
+  polyline: string; // Encoded polyline
+  decodedPath: Coordinates[]; // Decoded coordinates
+  totalDistance: number; // meters
+  duration: number; // seconds
+}
+
 // Journey state management
 export interface JourneyState {
   origin: Coordinates | null;
@@ -14,6 +22,8 @@ export interface JourneyState {
   remainingDistance: number | null;
   isTracking: boolean;
   error: string | null;
+  routeData: RouteData | null;
+  isOffRoute: boolean;
 }
 
 // Google Maps autocomplete prediction
@@ -24,10 +34,4 @@ export interface Prediction {
     main_text: string;
     secondary_text: string;
   };
-}
-
-// Progress calculation result
-export interface ProgressResult {
-  progress: number;
-  remainingDistance: number;
 }

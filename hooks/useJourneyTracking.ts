@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Coordinates, JourneyState } from '@/types';
-import { calculateProgress } from '@/utils/progress';
-import { getRouteDistance } from '@/utils/googleMaps';
+import { fetchRoute, calculateRouteProgress } from '@/utils/route';
 import { checkLocationPermission, getGeolocationErrorMessage } from '@/utils/geolocation';
 import { GEOLOCATION_CONFIG, ERROR_THRESHOLDS, SIMULATION_CONFIG } from '@/constants';
 
@@ -17,12 +16,15 @@ export function useJourneyTracking() {
     remainingDistance: null,
     isTracking: false,
     error: null,
+    routeData: null,
+    isOffRoute: false,
   });
 
   const [mockLocation, setMockLocation] = useState<Coordinates | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
   const [simulationInterval, setSimulationInterval] = useState<NodeJS.Timeout | null>(null);
   const errorCountRef = useRef(0);
+  const lastRouteRefetchRef = useRef<number>(0);
 
   // Set destination and start tracking
   const startJourney = useCallback(
@@ -52,17 +54,34 @@ export function useJourneyTracking() {
               lng: position.coords.longitude,
             };
 
-            // Get route distance
-            const distance = await getRouteDistance(origin, destinationCoords);
+            console.log('🚀 [startJourney] Fetching initial route...');
+            // Fetch route from API (server-side call, safe!)
+            const routeData = await fetchRoute(origin, destinationCoords);
+
+            if (!routeData) {
+              setJourneyState((prev) => ({
+                ...prev,
+                error: 'Failed to calculate route. Please try again.',
+              }));
+              resolve(null);
+              return;
+            }
+
+            console.log('✅ [startJourney] Route fetched:', {
+              distance: (routeData.totalDistance / 1000).toFixed(2) + ' km',
+              points: routeData.decodedPath.length,
+            });
 
             setJourneyState((prev) => ({
               ...prev,
               origin,
               destination: destinationCoords,
               currentPosition: origin,
-              totalDistance: distance,
+              totalDistance: routeData.totalDistance / 1000, // Convert to km for display
+              routeData,
               isTracking: true,
               error: null,
+              isOffRoute: false,
             }));
 
             resolve(origin);
@@ -79,35 +98,64 @@ export function useJourneyTracking() {
     []
   );
 
+  // Re-fetch route when user goes off-route
+  const refetchRoute = useCallback(async (currentPos: Coordinates, destination: Coordinates) => {
+    const now = Date.now();
+    const timeSinceLastRefetch = now - lastRouteRefetchRef.current;
+
+    // Throttle re-fetches to max once per 30 seconds
+    if (timeSinceLastRefetch < 30000) {
+      console.log('⏱️ [refetchRoute] Throttled - waiting before re-fetching');
+      return null;
+    }
+
+    console.log('🔄 [refetchRoute] User off route, fetching new route...');
+    lastRouteRefetchRef.current = now;
+
+    const newRoute = await fetchRoute(currentPos, destination);
+
+    if (newRoute) {
+      console.log('✅ [refetchRoute] New route fetched');
+      setJourneyState((prev) => ({
+        ...prev,
+        routeData: newRoute,
+        totalDistance: newRoute.totalDistance / 1000,
+        isOffRoute: false,
+      }));
+    }
+
+    return newRoute;
+  }, []);
+
   // Update current position and calculate progress
   useEffect(() => {
-    if (
-      !journeyState.isTracking ||
-      !journeyState.origin ||
-      !journeyState.destination ||
-      !journeyState.totalDistance
-    ) {
+    if (!journeyState.isTracking || !journeyState.destination || !journeyState.routeData) {
       return;
     }
 
     // If using mock location, calculate progress
     if (mockLocation) {
-      calculateProgress(mockLocation, journeyState.destination!, journeyState.totalDistance!).then(
-        ({ progress, remainingDistance }) => {
-          setJourneyState((prev) => ({
-            ...prev,
-            currentPosition: mockLocation,
-            progress,
-            remainingDistance,
-          }));
-        }
-      );
+      const progressData = calculateRouteProgress(mockLocation, journeyState.routeData);
+
+      setJourneyState((prev) => ({
+        ...prev,
+        currentPosition: mockLocation,
+        progress: progressData.progress,
+        remainingDistance: progressData.distanceRemaining,
+        isOffRoute: progressData.isOffRoute,
+      }));
+
+      // If off route, refetch
+      if (progressData.isOffRoute && journeyState.destination) {
+        refetchRoute(mockLocation, journeyState.destination);
+      }
+
       return;
     }
 
     // Watch position with high accuracy
     const watchId = navigator.geolocation.watchPosition(
-      async (position) => {
+      (position) => {
         // Reset error count on successful position update
         errorCountRef.current = 0;
 
@@ -116,20 +164,30 @@ export function useJourneyTracking() {
           lng: position.coords.longitude,
         };
 
-        // Calculate progress using actual route distance
-        const { progress, remainingDistance } = await calculateProgress(
-          currentPos,
-          journeyState.destination!,
-          journeyState.totalDistance!
-        );
+        // Calculate progress using the route polyline (no API call!)
+        const progressData = calculateRouteProgress(currentPos, journeyState.routeData!);
+
+        console.log('📍 [watchPosition] Progress:', {
+          progress: progressData.progress.toFixed(1) + '%',
+          remaining: progressData.distanceRemaining.toFixed(2) + ' km',
+          offRoute: progressData.isOffRoute,
+          distanceFromRoute: progressData.distanceFromRoute.toFixed(1) + ' m',
+        });
 
         setJourneyState((prev) => ({
           ...prev,
           currentPosition: currentPos,
-          progress,
-          remainingDistance,
+          progress: progressData.progress,
+          remainingDistance: progressData.distanceRemaining,
+          isOffRoute: progressData.isOffRoute,
           error: null, // Clear any previous errors
         }));
+
+        // If user is off route, refetch a new route
+        if (progressData.isOffRoute && journeyState.destination) {
+          console.log('⚠️ [watchPosition] User is off route!');
+          refetchRoute(currentPos, journeyState.destination);
+        }
       },
       (error) => {
         // Handle geolocation errors with proper messages
@@ -162,10 +220,10 @@ export function useJourneyTracking() {
     };
   }, [
     journeyState.isTracking,
-    journeyState.origin,
     journeyState.destination,
-    journeyState.totalDistance,
+    journeyState.routeData,
     mockLocation,
+    refetchRoute,
   ]);
 
   const stopJourney = useCallback(() => {
@@ -178,6 +236,8 @@ export function useJourneyTracking() {
       remainingDistance: null,
       isTracking: false,
       error: null,
+      routeData: null,
+      isOffRoute: false,
     });
     setMockLocation(null);
     setIsSimulating(false);
@@ -185,6 +245,7 @@ export function useJourneyTracking() {
       clearInterval(simulationInterval);
       setSimulationInterval(null);
     }
+    lastRouteRefetchRef.current = 0;
   }, [simulationInterval]);
 
   // Set mock location for testing
