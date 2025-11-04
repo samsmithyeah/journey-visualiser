@@ -7,6 +7,7 @@ import DebugPanel from '@/components/DebugPanel';
 import ErrorDisplay from '@/components/ErrorDisplay';
 import JourneyInfo from '@/components/JourneyInfo';
 import StopJourneyModal from '@/components/StopJourneyModal';
+import DestinationCelebration from '@/components/DestinationCelebration';
 import { useJourneyTracking } from '@/hooks/useJourneyTracking';
 import { reverseGeocode } from '@/utils/route';
 
@@ -14,6 +15,7 @@ export default function Home() {
   const [destinationName, setDestinationName] = useState<string>('');
   const [originName, setOriginName] = useState<string>('Current Location');
   const [showStopModal, setShowStopModal] = useState<boolean>(false);
+  const [celebrationDismissed, setCelebrationDismissed] = useState<boolean>(false);
   const {
     progress,
     isTracking,
@@ -27,6 +29,7 @@ export default function Home() {
     setMockPosition,
     simulateJourney,
     isSimulating,
+    hasReachedDestination,
   } = useJourneyTracking();
 
   const handleDestinationSelect = async (place: google.maps.places.PlaceResult) => {
@@ -54,6 +57,20 @@ export default function Home() {
     setDestinationName('');
     setOriginName('Current Location');
   };
+
+  const handleStartNewJourney = () => {
+    setCelebrationDismissed(false); // Reset for next journey
+    stopJourney();
+    setDestinationName('');
+    setOriginName('Current Location');
+  };
+
+  const handleCloseCelebration = () => {
+    setCelebrationDismissed(true); // Mark as dismissed to prevent reopening
+  };
+
+  // Derive celebration visibility directly from state (no effect needed)
+  const showCelebration = hasReachedDestination && !celebrationDismissed;
 
   return (
     <div className="min-h-screen relative overflow-hidden">
@@ -123,6 +140,14 @@ export default function Home() {
           onClose={() => setShowStopModal(false)}
           onConfirm={handleStopJourney}
         />
+
+        {/* Destination Celebration */}
+        {showCelebration && (
+          <DestinationCelebration
+            onClose={handleCloseCelebration}
+            onStartNewJourney={handleStartNewJourney}
+          />
+        )}
       </main>
     </div>
   );

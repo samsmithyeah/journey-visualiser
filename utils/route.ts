@@ -41,10 +41,15 @@ export function calculateRouteProgress(
   // Calculate progress percentage
   const progress = Math.min(Math.max((distanceTraveled / totalDistance) * 100, 0), 100);
 
+  // If remaining distance is very small (< 100 meters), consider it as 0
+  const DESTINATION_THRESHOLD_KM = 0.1; // 100 meters
+  const adjustedDistanceRemaining =
+    distanceRemaining < DESTINATION_THRESHOLD_KM ? 0 : distanceRemaining;
+
   return {
     progress,
     distanceTraveled,
-    distanceRemaining: Math.max(distanceRemaining, 0),
+    distanceRemaining: Math.max(adjustedDistanceRemaining, 0),
     isOffRoute,
     distanceFromRoute,
   };
